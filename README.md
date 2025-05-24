@@ -58,7 +58,7 @@ A comprehensive compliance management system for arcade operators, built with Ne
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/arcade-compliance.git
+git clone https://github.com/shrewdly-dev/arcade-compliance.git
 cd arcade-compliance
 ```
 
