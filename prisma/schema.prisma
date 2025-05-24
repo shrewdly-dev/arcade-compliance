@@ -1,0 +1,498 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  name                String?
+  password            String? // For credentials authentication
+  role                UserRole @default(USER)
+  emailVerified       Boolean  @default(false)
+  verificationToken   String?  @unique
+  onboardingCompleted Boolean  @default(false)
+  onboardingStep      Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  organizations OrganizationMember[]
+  userArcades   UserArcade[]
+  auditLogs     AuditLog[]
+  trainings     UserTraining[]
+  Account       Account[]
+  Session       Session[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String             @id @default(cuid())
+  name      String
+  type      OrganizationType
+  licenseNo String?            @unique
+  address   String?
+  phone     String?
+  email     String?
+  status    OrganizationStatus @default(ACTIVE)
+
+  // Onboarding details
+  tradingNames      String[]
+  businessType      String?
+  companyNumber     String?
+  vatNumber         String?
+  incorporationDate DateTime?
+  website           String?
+
+  // Address details
+  streetAddress String?
+  city          String?
+  postcode      String?
+  country       String?
+
+  // Operating License details (organization-wide)
+  operatingLicenseNo         String?
+  operatingLicenseIssueDate  DateTime?
+  operatingLicenseExpiryDate DateTime?
+  operatingLicenseAuthority  String?
+  operatingLicenseConditions Json? // Array of conditions
+
+  // Key personnel
+  designatedSupervisor String?
+  keyPersonnel         Json? // Array of personnel objects
+
+  // Compliance setup
+  ageVerificationProcedures   String?
+  responsibleGamblingPolicies String?
+  amlProcedures               String?
+  incidentReportingSystem     String?
+  recordKeepingSystem         String?
+
+  // Regulatory returns setup
+  gamingMachineDataCollection Boolean @default(false)
+  financialReportingSetup     Boolean @default(false)
+  customerInteractionLogs     Boolean @default(false)
+  complianceMonitoringSystem  String?
+  submissionSchedule          String?
+
+  // Onboarding status
+  onboardingCompleted Boolean @default(false)
+  onboardingStep      Int     @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  members     OrganizationMember[]
+  arcades     Arcade[]
+  documents   Document[]
+  auditLogs   AuditLog[]
+  trainings   Training[]
+  assessments Assessment[]
+  incidents   Incident[]
+
+  @@map("organizations")
+}
+
+model Arcade {
+  id             String @id @default(cuid())
+  name           String
+  organizationId String
+
+  // Location details
+  address  String
+  city     String?
+  postcode String?
+  country  String?
+
+  // Premises License details (specific to this arcade location)
+  premisesLicenseNo         String?
+  premisesLicenseIssueDate  DateTime?
+  premisesLicenseExpiryDate DateTime?
+  localAuthority            String?
+  premisesLicenseConditions Json? // Array of conditions
+
+  // Operational details
+  openingHours String?
+  contactPhone String?
+  contactEmail String?
+
+  // Machine inventory
+  category_b3_machines Int @default(0)
+  category_c_machines  Int @default(0)
+  category_d_machines  Int @default(0)
+  other_machines       Int @default(0)
+
+  // Compliance status
+  isActive       Boolean   @default(true)
+  lastInspection DateTime?
+  nextInspection DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  machines     Machine[]
+  userArcades  UserArcade[]
+  incidents    Incident[]
+  documents    Document[]
+
+  @@map("arcades")
+}
+
+model Machine {
+  id       String @id @default(cuid())
+  arcadeId String
+
+  // Machine identification
+  serialNumber String          @unique
+  manufacturer String?
+  model        String?
+  category     MachineCategory
+
+  // Installation details
+  installDate DateTime?
+  location    String? // Location within the arcade
+
+  // Operational status
+  isActive      Boolean   @default(true)
+  isOperational Boolean   @default(true)
+  lastService   DateTime?
+  nextService   DateTime?
+
+  // Compliance tracking
+  lastInspection  DateTime?
+  complianceNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  arcade Arcade @relation(fields: [arcadeId], references: [id], onDelete: Cascade)
+
+  @@map("machines")
+}
+
+model UserArcade {
+  id       String @id @default(cuid())
+  userId   String
+  arcadeId String
+
+  // Assignment details
+  isPrimary  Boolean  @default(false) // User's primary arcade
+  assignedAt DateTime @default(now())
+  assignedBy String? // User ID who assigned this
+
+  // Access permissions
+  canManage Boolean @default(false)
+  canView   Boolean @default(true)
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  arcade Arcade @relation(fields: [arcadeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, arcadeId])
+  @@map("user_arcades")
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  role           String
+  joinedAt       DateTime @default(now())
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@map("organization_members")
+}
+
+model Document {
+  id             String           @id @default(cuid())
+  title          String
+  description    String?
+  category       DocumentCategory
+  type           DocumentType
+  filePath       String?
+  fileUrl        String?
+  version        String           @default("1.0")
+  status         DocumentStatus   @default(DRAFT)
+  organizationId String?
+  arcadeId       String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  expiresAt      DateTime?
+
+  // Relations
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  arcade       Arcade?       @relation(fields: [arcadeId], references: [id])
+  auditLogs    AuditLog[]
+
+  @@map("documents")
+}
+
+model Training {
+  id             String           @id @default(cuid())
+  title          String
+  description    String?
+  category       TrainingCategory
+  content        String?
+  duration       Int? // in minutes
+  isRequired     Boolean          @default(false)
+  organizationId String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  organization  Organization?  @relation(fields: [organizationId], references: [id])
+  userTrainings UserTraining[]
+
+  @@map("trainings")
+}
+
+model UserTraining {
+  id          String         @id @default(cuid())
+  userId      String
+  trainingId  String
+  status      TrainingStatus @default(NOT_STARTED)
+  score       Int?
+  completedAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relations
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  training Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trainingId])
+  @@map("user_trainings")
+}
+
+model Assessment {
+  id             String             @id @default(cuid())
+  title          String
+  description    String?
+  category       AssessmentCategory
+  questions      Json // Store questions as JSON
+  passingScore   Int                @default(70)
+  organizationId String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  // Relations
+  organization Organization?      @relation(fields: [organizationId], references: [id])
+  results      AssessmentResult[]
+
+  @@map("assessments")
+}
+
+model AssessmentResult {
+  id           String   @id @default(cuid())
+  assessmentId String
+  userId       String
+  score        Int
+  answers      Json // Store answers as JSON
+  passed       Boolean
+  completedAt  DateTime @default(now())
+
+  // Relations
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@map("assessment_results")
+}
+
+model Incident {
+  id             String           @id @default(cuid())
+  title          String
+  description    String
+  category       IncidentCategory
+  severity       IncidentSeverity
+  status         IncidentStatus   @default(OPEN)
+  reportedBy     String?
+  assignedTo     String?
+  organizationId String?
+  arcadeId       String?
+  occurredAt     DateTime
+  resolvedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  arcade       Arcade?       @relation(fields: [arcadeId], references: [id])
+  auditLogs    AuditLog[]
+
+  @@map("incidents")
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  action         String
+  entityType     String
+  entityId       String?
+  oldValues      Json?
+  newValues      Json?
+  userId         String?
+  organizationId String?
+  documentId     String?
+  incidentId     String?
+  createdAt      DateTime @default(now())
+
+  // Relations
+  user         User?         @relation(fields: [userId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  document     Document?     @relation(fields: [documentId], references: [id])
+  incident     Incident?     @relation(fields: [incidentId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// Enums
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum OrganizationType {
+  ARCADE_OPERATOR
+  REGULATOR
+  CONSULTANT
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum MachineCategory {
+  B3
+  C
+  D
+}
+
+enum DocumentCategory {
+  LICENSING
+  OPERATIONS
+  RESPONSIBLE_GAMBLING
+  STAFF_TRAINING
+  COMPLIANCE
+  POLICY
+  PROCEDURE
+}
+
+enum DocumentType {
+  POLICY
+  PROCEDURE
+  FORM
+  CERTIFICATE
+  REPORT
+  GUIDELINE
+}
+
+enum DocumentStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  ARCHIVED
+}
+
+enum TrainingCategory {
+  RESPONSIBLE_GAMBLING
+  AGE_VERIFICATION
+  MACHINE_OPERATION
+  CUSTOMER_SERVICE
+  COMPLIANCE
+  SAFETY
+}
+
+enum TrainingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
+enum AssessmentCategory {
+  RESPONSIBLE_GAMBLING
+  AGE_VERIFICATION
+  COMPLIANCE
+  OPERATIONS
+}
+
+enum IncidentCategory {
+  UNDERAGE_GAMBLING
+  RESPONSIBLE_GAMBLING
+  MACHINE_MALFUNCTION
+  CUSTOMER_COMPLAINT
+  REGULATORY_BREACH
+  SAFETY
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// NextAuth.js tables
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
